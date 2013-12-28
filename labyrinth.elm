@@ -3,6 +3,7 @@ import List
 import Set
 import Random
 import Keyboard
+import Mouse
 import Graphics.Input
 
 maze =
@@ -31,6 +32,8 @@ unit = 10 -- graphics scaling factor, reasonable default is 10
 --------------------------------------
 
 player_form = lift (\t -> filled (hsv (t / 750) 1 0.95) (circle unit)) (every 100)
+
+sgn x = if x<0 then -1 else if x>0 then 1 else 0
 
 timeStampAtStart = fst <~ (timestamp (constant ()))
 
@@ -77,13 +80,14 @@ game_state =
    , hunters = map Stalled hunters
    , gems = Set.diff (Set.fromList (concatMap (\j -> map (\i -> (i,j)) [1..mi]) [1..mj])) maze_set }
    (merge
-    (move_player <~ frame' ~ sampleOn frame' (lift3 (,,) walking Keyboard.arrows slowness_player))
+    (move_player <~ frame' ~ sampleOn frame' (lift3 (,,) walking player_input slowness_player))
     (move_hunters <~ Random.floatList (lift (\_ -> 2*(length hunters)) (keepIf id False (fst <~ hunter_steps)))))
 
-move_player dt (walk,arr,sl) state =
+move_player dt (walk,input,sl) state =
   let
     ((x,y),(dx,dy)) = state.player
-    (ndx,ndy) = if walk && arr == {x = 0, y = 0} then (dx,dy) else (arr.x,arr.y)
+    dir = input (x,y)
+    (ndx,ndy) = if walk && isNothing dir then (dx,dy) else case dir of {Nothing -> (0,0); Just {x,y} -> (x,y)}
     x' = x + dt / sl * unit * toFloat ndx
     y' = y + dt / sl * unit * toFloat ndy
   in
@@ -100,6 +104,21 @@ move_player dt (walk,arr,sl) state =
        in if closer_than (3/4*unit) (x',y') (ij2xy g)
           then Set.remove g state.gems
           else state.gems }
+
+player_input = lift2 
+               (\{x,y} (mx,my) (px,py) -> if x==0 && y==0
+                                          then
+                                            if closer_than unit (mx,my) (px,py)
+                                            then Just {x = 0, y = 0}
+                                            else if closer_than (8*unit) (mx,my) (px,py)
+                                                 then let dx = mx-px
+                                                          dy = my-py
+                                                      in Just {x = if abs dx > 3*unit/4 then sgn dx else 0,
+                                                               y = if abs dy > 3*unit/4 then sgn dy else 0}
+                                                 else Nothing
+                                          else Just {x = x, y = y})
+               Keyboard.arrows
+               (lift (\(x,y) -> let (ox,oy) = ij2xy (0,0) in (ox+toFloat x, oy-toFloat y)) Mouse.position)
 
 move_hunters rnd state =
   let
@@ -175,13 +194,19 @@ display { caught, won } { player, hunters, gems } player_form boxWalking menuPla
        map (\h -> move h (filled black (circle (2*unit)))) hunters
        ++
        map (\b -> move (ij2xy b) (filled blue (square (4*unit)))) maze_list
-     , flow right [ container (28*unit) (3*unit) midLeft
+     , flow right [ spacer unit unit
+                  , container (44*unit) (3*unit) midLeft
+                    (text . Text.color red . monospace . Text.height (2*unit) . toText <| "use the arrow keys or mouse to steer") ]
+     , flow right [ spacer unit unit
+                  , container (28*unit) (3*unit) midLeft
                     (text . monospace . Text.height (2*unit) . toText <| "keep walking direction:")
                   , let d = max 20 (2*unit) in container d (3*unit) middle boxWalking ]
-     , flow right [ container (25*unit) (3*unit) midLeft
+     , flow right [ spacer unit unit
+                  , container (25*unit) (3*unit) midLeft
                     (text . monospace . Text.height (2*unit) . toText <| "adjust player speed:")
                   , let d = max 20 (2*unit) in container (3*d) (3*unit) middle menuPlayer ]
-     , flow right [ container (25*unit) (3*unit) midLeft
+     , flow right [ spacer unit unit
+                  , container (25*unit) (3*unit) midLeft
                     (text . monospace . Text.height (2*unit) . toText <| "adjust hunters speed:")
                   , let d = max 20 (2*unit) in container (3*d) (3*unit) middle menuHunters ]
      -- , asText frequ
