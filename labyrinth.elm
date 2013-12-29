@@ -4,6 +4,7 @@ import Set
 import Random
 import Keyboard
 import Mouse
+import Touch
 import Graphics.Input
 
 maze =
@@ -105,20 +106,29 @@ move_player dt (walk,input,sl) state =
           then Set.remove g state.gems
           else state.gems }
 
-player_input = lift2 
-               (\{x,y} (mx,my) (px,py) -> if x==0 && y==0
+player_input = lift2
+               (\{x,y} (ix,iy,keep) (px,py) ->
+                                          if x==0 && y==0
                                           then
-                                            if closer_than unit (mx,my) (px,py)
+                                            if closer_than unit (ix,iy) (px,py)
                                             then Just {x = 0, y = 0}
-                                            else if closer_than (8*unit) (mx,my) (px,py)
-                                                 then let dx = mx-px
-                                                          dy = my-py
+                                            else if keep (ix,iy) (px,py)
+                                                 then let dx = ix-px
+                                                          dy = iy-py
                                                       in Just {x = if abs dx > 3*unit/4 then sgn dx else 0,
                                                                y = if abs dy > 3*unit/4 then sgn dy else 0}
                                                  else Nothing
                                           else Just {x = x, y = y})
                Keyboard.arrows
-               (lift (\(x,y) -> let (ox,oy) = ij2xy (0,0) in (ox+toFloat x, oy-toFloat y)) Mouse.position)
+               (lift
+                (\(x,y,keep) -> let (ox,oy) = ij2xy (0,0) in (ox+toFloat x, oy-toFloat y,keep))
+                (lift2
+                 (\ts (mx,my) -> head (map (\{x,y} -> (x,y,\_ _ -> True)) ts
+                                       ++ [(mx,my,closer_than (8*unit))]))
+                 (lift
+                  (filter (\{x,y} -> 2*unit<x && x<2*unit*(2*mi+1) && 2*unit<y && y<2*unit*(2*mj+1)))
+                  Touch.touches)
+                 Mouse.position))
 
 move_hunters rnd state =
   let
@@ -195,8 +205,8 @@ display { caught, won } { player, hunters, gems } player_form boxWalking menuPla
        ++
        map (\b -> move (ij2xy b) (filled blue (square (4*unit)))) maze_list
      , flow right [ spacer unit unit
-                  , container (44*unit) (3*unit) midLeft
-                    (text . Text.color red . monospace . Text.height (2*unit) . toText <| "use the arrow keys or mouse to steer") ]
+                  , container (42*unit) (3*unit) midLeft
+                    (text . Text.color red . monospace . Text.height (2*unit) . toText <| "use arrows, mouse or touch to steer") ]
      , flow right [ spacer unit unit
                   , container (28*unit) (3*unit) midLeft
                     (text . monospace . Text.height (2*unit) . toText <| "keep walking direction:")
