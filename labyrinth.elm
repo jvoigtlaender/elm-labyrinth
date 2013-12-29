@@ -28,11 +28,9 @@ hunters = [(5,5),(5,8),(6,7),(10,2)]
 
 frame = fps 100
 
-unit = 10 -- graphics scaling factor, reasonable default is 10
-
 --------------------------------------
 
-player_form = lift (\t -> filled (hsv (t / 750) 1 0.95) (circle unit)) (every 100)
+player_color = lift (\t -> filled (hsv (t / 750) 1 0.95)) (every 100)
 
 sgn x = if x<0 then -1 else if x>0 then 1 else 0
 
@@ -42,8 +40,8 @@ frame' = delay 0 frame
 
 mi = length (String.toList (head maze))
 mj = length maze
-xy2ij (x,y) = (round ((1+x/2/unit+toFloat mi)/2), round ((1-y/2/unit+toFloat mj)/2))
-ij2xy (i,j) = (2*unit*toFloat(2*i-mi-1), 2*unit*toFloat(mj-2*j+1))
+xy2ij (x,y) = (round ((1+x/2+toFloat mi)/2), round ((1-y/2+toFloat mj)/2))
+ij2xy (i,j) = (2*toFloat(2*i-mi-1), 2*toFloat(mj-2*j+1))
 
 closer_than d (x1,y1) (x2,y2) = (x1-x2)^2+(y1-y2)^2 < d^2
 
@@ -67,7 +65,7 @@ game_state =
     smoothen s = map (\h -> case h of
                               Stalled p          -> ij2xy p
                               Moving (p,(di,dj)) -> let (x,y) = ij2xy p
-                                                    in (x+toFloat(di)*s*4*unit,y-toFloat(dj)*s*4*unit))
+                                                    in (x+toFloat(di)*s*4,y-toFloat(dj)*s*4))
   in
    sampleOn frame'
    <|
@@ -89,20 +87,19 @@ move_player dt (walk,input,sl) state =
     ((x,y),(dx,dy)) = state.player
     dir = input (x,y)
     (ndx,ndy) = if walk && isNothing dir then (dx,dy) else case dir of {Nothing -> (0,0); Just {x,y} -> (x,y)}
-    x' = x + dt / sl * unit * toFloat ndx
-    y' = y + dt / sl * unit * toFloat ndy
+    x' = x + dt / sl * ndx
+    y' = y + dt / sl * ndy
   in
    { state
    | player <-
        if isEmpty . Set.toList . Set.intersect maze_set . Set.fromList 
           . map (xy2ij . (\(u,v) -> (x'+u,y'+v)))
-          <| [(unit,unit),(0,unit),(-unit,unit),(-unit,0)
-             ,(-unit,-unit),(0,-unit),(unit,-unit),(unit,0)]
+          <| [(1,1),(0,1),(-1,1),(-1,0),(-1,-1),(0,-1),(1,-1),(1,0)]
        then ((x',y'),(ndx,ndy))
        else ((x,y),(0,0))
    , gems <-
        let g = xy2ij (x',y')
-       in if closer_than (3/4*unit) (x',y') (ij2xy g)
+       in if closer_than (3/4) (x',y') (ij2xy g)
           then Set.remove g state.gems
           else state.gems }
 
@@ -110,25 +107,24 @@ player_input = lift2
                (\{x,y} (ix,iy,keep) (px,py) ->
                                           if x==0 && y==0
                                           then
-                                            if closer_than unit (ix,iy) (px,py)
+                                            if closer_than 1 (ix,iy) (px,py)
                                             then Just {x = 0, y = 0}
                                             else if keep (ix,iy) (px,py)
                                                  then let dx = ix-px
                                                           dy = iy-py
-                                                      in Just {x = if abs dx > 3*unit/4 then sgn dx else 0,
-                                                               y = if abs dy > 3*unit/4 then sgn dy else 0}
+                                                      in Just {x = if abs dx > 3/4 then sgn dx else 0,
+                                                               y = if abs dy > 3/4 then sgn dy else 0}
                                                  else Nothing
                                           else Just {x = x, y = y})
                Keyboard.arrows
-               (lift
-                (\(x,y,keep) -> let (ox,oy) = ij2xy (0,0) in (ox+toFloat x, oy-toFloat y,keep))
-                (lift2
-                 (\ts (mx,my) -> head (map (\{x,y} -> (x,y,\_ _ -> True)) ts
-                                       ++ [(mx,my,closer_than (8*unit))]))
-                 (lift
-                  (filter (\{x,y} -> 2*unit<x && x<2*unit*(2*mi+1) && 2*unit<y && y<2*unit*(2*mj+1)))
-                  Touch.touches)
-                 Mouse.position))
+               (lift2
+                (\ts (mx,my) -> let (ox,oy) = ij2xy (0,0)
+                                in head (map (\(x,y) -> (ox+x,oy-y,\_ _ -> True)) ts
+                                         ++ [(ox+mx,oy-my,closer_than 8)]))
+                (lift
+                 (filter (\(x,y) -> 2<x && x<4*mi+2 && 2<y && y<4*mj+2))
+                 (lift2 (\unit -> map (\{x,y} -> ((toFloat x)/unit,(toFloat y)/unit))) unit Touch.touches))
+                (lift2 (\unit (x,y) -> ((toFloat x)/unit,(toFloat y)/unit)) unit Mouse.position))
 
 move_hunters rnd state =
   let
@@ -166,7 +162,7 @@ move_hunters rnd state =
 
 outcome = foldp
           (\((t, { player, hunters, gems }), t0) { caught, won }
-           -> { caught = List.any (closer_than (3*unit) player) hunters || caught
+           -> { caught = List.any (closer_than 3 player) hunters || caught
               , won = maybe (if isEmpty (Set.toList gems) then Just (t-t0) else Nothing) Just won })
           { caught = False, won = Nothing }
           (lift2 (,) (timestamp game_state) timeStampAtStart) 
@@ -177,11 +173,14 @@ outcome = foldp
 
 (menuHunters,slowness_hunters) = Graphics.Input.dropDown (map (\i -> (if i>0 then "+" ++ show i else show i,(22-i)*5)) [0,1,2,3,-1,-2,-3])
 
-display { caught, won } { player, hunters, gems } player_form boxWalking menuPlayer menuHunters -- frequ
+(menuUnit,unit) = Graphics.Input.dropDown (map (\i -> (if i>0 then "+" ++ show i else show i,(5+i)*2)) [0,1,2,3,-1,-2,-3])
+
+display { caught, won } { player, hunters, gems } player_color boxWalking menuPlayer menuHunters menuUnit unit -- frequ
   =
   let
     wi = 4*unit*(mi+1)
     he = 4*unit*(mj+1)
+    unit' = toFloat unit
   in
    if caught || isJust won
    then
@@ -190,43 +189,49 @@ display { caught, won } { player, hunters, gems } player_form boxWalking menuPla
      [ (midBottom, if isJust won
                    then
                      let after = toFloat(truncate ((\(Just t) -> t) won) `div` 100)/10
-                     in text . monospace . Text.height (3*unit) . toText <| "YOU WON (" ++ show after ++ "s)!"
-                   else text . monospace . Text.height (4*unit) . toText <| "GAME OVER!")
-     , (midTop, text . monospace . Text.height (2*unit) . toText <| "(reload to start again)")
+                     in text . monospace . Text.height (3*unit') . toText <| "YOU WON (" ++ show after ++ "s)!"
+                   else text . monospace . Text.height (4*unit') . toText <| "GAME OVER!")
+     , (midTop, text . monospace . Text.height (2*unit') . toText <| "(reload to start again)")
      ]
    else
      flow down
      [ collage wi he <|
-       map (\g -> move (ij2xy g) (filled yellow (ngon 5 (unit/2)))) (Set.toList gems)
+       map (\g -> move (let (x,y) = ij2xy g in (x*unit',y*unit')) (filled yellow (ngon 5 (unit'/2)))) (Set.toList gems)
        ++
-       [move player player_form]
+       [move (let (x,y) = player in (x*unit',y*unit')) (player_color (circle unit'))]
        ++
-       map (\h -> move h (filled black (circle (2*unit)))) hunters
+       map (\(x,y) -> move (x*unit',y*unit') (filled black (circle (2*unit')))) hunters
        ++
-       map (\b -> move (ij2xy b) (filled blue (square (4*unit)))) maze_list
+       map (\b -> move (let (x,y) = ij2xy b in (x*unit',y*unit')) (filled blue (square (4*unit')))) maze_list
      , flow right [ spacer unit unit
                   , container (42*unit) (3*unit) midLeft
-                    (text . Text.color red . monospace . Text.height (2*unit) . toText <| "use arrows, mouse or touch to steer") ]
+                    (text . Text.color red . monospace . Text.height (2*unit') . toText <| "use arrows, mouse or touch to steer") ]
      , flow right [ spacer unit unit
                   , container (28*unit) (3*unit) midLeft
-                    (text . monospace . Text.height (2*unit) . toText <| "keep walking direction:")
+                    (text . monospace . Text.height (2*unit') . toText <| "keep walking direction:")
                   , let d = max 20 (2*unit) in container d (3*unit) middle boxWalking ]
      , flow right [ spacer unit unit
                   , container (25*unit) (3*unit) midLeft
-                    (text . monospace . Text.height (2*unit) . toText <| "adjust player speed:")
+                    (text . monospace . Text.height (2*unit') . toText <| "adjust player speed:")
                   , let d = max 20 (2*unit) in container (3*d) (3*unit) middle menuPlayer ]
      , flow right [ spacer unit unit
                   , container (25*unit) (3*unit) midLeft
-                    (text . monospace . Text.height (2*unit) . toText <| "adjust hunters speed:")
+                    (text . monospace . Text.height (2*unit') . toText <| "adjust hunters speed:")
                   , let d = max 20 (2*unit) in container (3*d) (3*unit) middle menuHunters ]
+     , flow right [ spacer unit unit
+                  , container (37*unit) (3*unit) midLeft
+                    (text . monospace . Text.height (2*unit') . toText <| "adjust graphics scaling factor:")
+                  , let d = max 20 (2*unit) in container (3*d) (3*unit) middle menuUnit ]
      -- , asText frequ
      ]
 
-main = lift6 display
+main = lift8 display
        outcome
        game_state
-       (sampleOn frame' player_form)
+       (sampleOn frame' player_color)
        boxWalking
        menuPlayer
        menuHunters
+       menuUnit
+       unit
        -- <| (\(t,c) -> 1000*c/t) <~ foldp (\dt (t,c) -> (t+dt,c+1)) (0,0) frame'
