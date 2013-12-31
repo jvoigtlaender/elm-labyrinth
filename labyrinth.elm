@@ -41,8 +41,11 @@ frame' = delay 0 frame
 mi = length (String.toList (head maze))
 mj = length maze
 
+type XY = (Float,Float)
+type IJ = (Int,Int)
+
 xy2ij (x,y) = (round(x+0.5), round(0.5-y))
-ij2xy (i,j) = (-0.5+toFloat i, 0.5-toFloat j)
+ij2xy (i,j) = (-0.5+toFloat(i), 0.5-toFloat(j))
 
 (ox,oy) = ij2xy (0,0)
 
@@ -55,43 +58,75 @@ maze_list =
 
 maze_set = Set.fromList maze_list
 
-data HunterState = Stalled (Int,Int) | Moving ((Int,Int),(Int,Int))
-
 hunter_steps =
   foldp
   (\ds (b,s) -> if s+ds>1 then (True,s+ds-1) else (False,s+ds)) 
   (False, 0)
   (lift2 (/) frame (sampleOn frame slowness_hunters))
 
+type Dir = Int -- only -1, 0, or 1
+
+data HunterState = Stalled IJ | Moving (IJ, (Dir,Dir))
+
+initially : { player : (XY, (Dir,Dir)), hunters : [HunterState], gems : Set.Set IJ }
+initially = 
+   { player = (ij2xy player, (0,0))
+   , hunters = map Stalled hunters
+   , gems = Set.diff (Set.fromList (concatMap (\j -> map (\i -> (i,j)) [1..mi]) [1..mj])) maze_set }
+
+game_state : Signal { player : XY, hunters : [XY], gems : Set.Set IJ }
 game_state = 
   let
-    smoothen s = map (\h -> case h of
-                              Stalled p          -> ij2xy p
-                              Moving (p,(di,dj)) -> let (x,y) = ij2xy p
-                                                    in (x+toFloat(di)*s,y-toFloat(dj)*s))
+    smoothen s h = case h of
+                     Stalled p          -> ij2xy p
+                     Moving (p,(di,dj)) -> let (x,y) = ij2xy p
+                                           in (x+toFloat(di)*s,y-toFloat(dj)*s)
   in
    sampleOn frame'
    <|
    lift2 (\s state -> { state
                       | player <- fst (state.player)  
-                      , hunters <- smoothen (clamp 0 1 s) state.hunters })
+                      , hunters <- map (smoothen (clamp 0 1 s)) state.hunters })
    (snd <~ hunter_steps)
    <|
    foldp (<|)
-   { player = (ij2xy player, (0,0))
-   , hunters = map Stalled hunters
-   , gems = Set.diff (Set.fromList (concatMap (\j -> map (\i -> (i,j)) [1..mi]) [1..mj])) maze_set }
+   initially
    (merge
     (move_player <~ frame' ~ sampleOn frame' (lift3 (,,) walking player_input slowness_player))
     (move_hunters <~ Random.floatList (lift (\_ -> 2*(length hunters)) (keepIf id False (fst <~ hunter_steps)))))
 
+player_input : Signal (XY -> Maybe {x : Dir, y : Dir})
+player_input = lift2
+               (\{x,y} (ix,iy,keep) (px,py) ->
+                 if x==0 && y==0
+                 then
+                   if closer_than 0.25 (ix,iy) (px,py)
+                   then Just {x = 0, y = 0}
+                   else if keep (ix,iy) (px,py)
+                        then let dx = ix-px
+                                 dy = iy-py
+                             in Just {x = if abs dx > 0.1875 then sgn dx else 0,
+                                      y = if abs dy > 0.1875 then sgn dy else 0}
+                        else Nothing
+                 else Just {x = x, y = y})
+               Keyboard.arrows
+               (lift2
+                (\ts m -> head (ts ++ [m]))
+                (lift
+                 (filter (\(x,y,_) -> let (i,j) = xy2ij (x,y) in 1<=i && i<=mi && 1<=j && j<=mj))
+                 (lift2 (\unit -> map (\{x,y} -> (ox+toFloat(x)/unit,oy-toFloat(y)/unit,\_ _ -> True))) unit Touch.touches))
+                (lift2 (\unit (x,y) -> (ox+toFloat(x)/unit,oy-toFloat(y)/unit,closer_than 2)) unit Mouse.position))
+
+move_player : Time -> (Bool, XY -> Maybe {x : Dir, y : Dir}, Float)
+                   -> { a | player : (XY, (Dir,Dir)), gems : Set.Set IJ }
+                   -> { a | player : (XY, (Dir,Dir)), gems : Set.Set IJ }
 move_player dt (walk,input,sl) state =
   let
     ((x,y),(dx,dy)) = state.player
     dir = input (x,y)
     (ndx,ndy) = if walk && isNothing dir then (dx,dy) else case dir of {Nothing -> (0,0); Just {x,y} -> (x,y)}
-    x' = x + dt/sl*ndx
-    y' = y + dt/sl*ndy
+    x' = x+dt/sl*ndx
+    y' = y+dt/sl*ndy
   in
    { state
    | player <-
@@ -106,27 +141,8 @@ move_player dt (walk,input,sl) state =
           then Set.remove g state.gems
           else state.gems }
 
-player_input = lift2
-               (\{x,y} (ix,iy,keep) (px,py) ->
-                                          if x==0 && y==0
-                                          then
-                                            if closer_than 0.25 (ix,iy) (px,py)
-                                            then Just {x = 0, y = 0}
-                                            else if keep (ix,iy) (px,py)
-                                                 then let dx = ix-px
-                                                          dy = iy-py
-                                                      in Just {x = if abs dx > 0.1875 then sgn dx else 0,
-                                                               y = if abs dy > 0.1875 then sgn dy else 0}
-                                                 else Nothing
-                                          else Just {x = x, y = y})
-               Keyboard.arrows
-               (lift2
-                (\ts m -> head (ts ++ [m]))
-                (lift
-                 (filter (\(x,y,_) -> let (i,j) = xy2ij (x,y) in 1<=i && i<=mi && 1<=j && j<=mj))
-                 (lift2 (\unit -> map (\{x,y} -> (ox+(toFloat x)/unit,oy-(toFloat y)/unit,\_ _ -> True))) unit Touch.touches))
-                (lift2 (\unit (x,y) -> (ox+(toFloat x)/unit,oy-(toFloat y)/unit,closer_than 2)) unit Mouse.position))
-
+move_hunters : [Float] -> { a | player : (XY, b), hunters : [HunterState] }
+                       -> { a | player : (XY, b), hunters : [HunterState] }
 move_hunters rnd state =
   let
     l = length hunters
@@ -161,6 +177,7 @@ move_hunters rnd state =
   in
    { state | hunters <- map check_and_patch (zip (drop l rs) hunters') }
 
+outcome : Signal { caught : Bool, won : Maybe Time }
 outcome = foldp
           (\((t, { player, hunters, gems }), t0) { caught, won }
            -> { caught = List.any (closer_than 0.75 player) hunters || caught
@@ -170,18 +187,19 @@ outcome = foldp
 
 (boxWalking,walking) = Graphics.Input.checkbox True
 
-(menuPlayer,slowness_player) = Graphics.Input.dropDown (map (\i -> (if i>0 then "+" ++ show i else show i,(18-i)*20)) [0,1,2,3,-1,-2,-3])
+myMenu : (number -> number) -> [number] -> (Signal Element, Signal number)
+myMenu f = Graphics.Input.dropDown . map (\i -> (if i>0 then "+" ++ show i else show i,f i))
 
-(menuHunters,slowness_hunters) = Graphics.Input.dropDown (map (\i -> (if i>0 then "+" ++ show i else show i,(22-i)*20)) [0,1,2,3,-1,-2,-3])
-
-(menuUnit,unit) = Graphics.Input.dropDown (map (\i -> (if i>0 then "+" ++ show i else show i,(5+i)*8)) [0,1,2,3,-1,-2,-3])
+(menuPlayer,slowness_player)   = myMenu (\i -> (18-i)*20) [0,1,2,3,-1,-2,-3]
+(menuHunters,slowness_hunters) = myMenu (\i -> (22-i)*20) [0,1,2,3,-1,-2,-3]
+(menuUnit,unit)                = myMenu (\i -> (5+i)*8) [0,1,2,3,-1,-2,-3]
 
 display { caught, won } { player, hunters, gems } player_color boxWalking menuPlayer menuHunters menuUnit unit -- frequ
   =
   let
     wi = (mi+1)*unit
     he = (mj+1)*unit
-    unit' = toFloat unit
+    unit' = toFloat(unit)
   in
    if caught || isJust won
    then
@@ -195,7 +213,7 @@ display { caught, won } { player, hunters, gems } player_color boxWalking menuPl
      , (midTop, text . monospace . Text.height (unit'/2) . toText <| "(reload to start again)")
      ]
    else
-     let xy2screen (x,y) = ((x-ox-0.5-toFloat mi/2)*unit',(y-oy+0.5+toFloat mj/2)*unit')
+     let xy2screen (x,y) = ((x-ox-0.5-toFloat(mi)/2)*unit',(y-oy+0.5+toFloat(mj)/2)*unit')
      in
      flow down
      [ collage wi he <|
