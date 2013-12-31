@@ -64,11 +64,11 @@ hunter_steps =
   (False, 0)
   (lift2 (/) frame (sampleOn frame slowness_hunters))
 
-type Dir = Int -- only -1, 0, or 1
+type Dir = (Int,Int) -- only -1, 0, or 1
 
-data HunterState = Stalled IJ | Moving (IJ, (Dir,Dir))
+data HunterState = Stalled IJ | Moving (IJ,Dir)
 
-initially : { player : (XY, (Dir,Dir)), hunters : [HunterState], gems : Set.Set IJ }
+initially : { player : (XY,Dir), hunters : [HunterState], gems : Set.Set IJ }
 initially = 
    { player = (ij2xy player, (0,0))
    , hunters = map Stalled hunters
@@ -95,20 +95,20 @@ game_state =
     (move_player <~ frame' ~ sampleOn frame' (lift3 (,,) walking player_input slowness_player))
     (move_hunters <~ Random.floatList (lift (\_ -> 2*(length hunters)) (keepIf id False (fst <~ hunter_steps)))))
 
-player_input : Signal (XY -> Maybe {x : Dir, y : Dir})
+player_input : Signal (XY -> Maybe Dir)
 player_input = lift2
                (\{x,y} (ix,iy,keep) (px,py) ->
                  if x==0 && y==0
                  then
                    if closer_than 0.25 (ix,iy) (px,py)
-                   then Just {x = 0, y = 0}
+                   then Just (0,0)
                    else if keep (ix,iy) (px,py)
                         then let dx = ix-px
                                  dy = iy-py
-                             in Just {x = if abs dx > 0.1875 then sgn dx else 0,
-                                      y = if abs dy > 0.1875 then sgn dy else 0}
+                             in Just (if abs dx > 0.1875 then sgn dx else 0,
+                                      if abs dy > 0.1875 then sgn dy else 0)
                         else Nothing
-                 else Just {x = x, y = y})
+                 else Just (x,y))
                Keyboard.arrows
                (lift2
                 (\ts m -> head (ts ++ [m]))
@@ -117,14 +117,13 @@ player_input = lift2
                  (lift2 (\unit -> map (\{x,y} -> (ox+toFloat(x)/unit,oy-toFloat(y)/unit,\_ _ -> True))) unit Touch.touches))
                 (lift2 (\unit (x,y) -> (ox+toFloat(x)/unit,oy-toFloat(y)/unit,closer_than 2)) unit Mouse.position))
 
-move_player : Time -> (Bool, XY -> Maybe {x : Dir, y : Dir}, Float)
-                   -> { a | player : (XY, (Dir,Dir)), gems : Set.Set IJ }
-                   -> { a | player : (XY, (Dir,Dir)), gems : Set.Set IJ }
+move_player : Time -> (Bool, XY -> Maybe Dir, Float) -> { a | player : (XY,Dir), gems : Set.Set IJ }
+                                                     -> { a | player : (XY,Dir), gems : Set.Set IJ }
 move_player dt (walk,input,sl) state =
   let
     ((x,y),(dx,dy)) = state.player
     dir = input (x,y)
-    (ndx,ndy) = if walk && isNothing dir then (dx,dy) else case dir of {Nothing -> (0,0); Just {x,y} -> (x,y)}
+    (ndx,ndy) = if walk && isNothing dir then (dx,dy) else case dir of {Nothing -> (0,0); Just d -> d}
     x' = x+dt/sl*ndx
     y' = y+dt/sl*ndy
   in
@@ -141,8 +140,8 @@ move_player dt (walk,input,sl) state =
           then Set.remove g state.gems
           else state.gems }
 
-move_hunters : [Float] -> { a | player : (XY, b), hunters : [HunterState] }
-                       -> { a | player : (XY, b), hunters : [HunterState] }
+move_hunters : [Float] -> { a | player : (XY,b), hunters : [HunterState] }
+                       -> { a | player : (XY,b), hunters : [HunterState] }
 move_hunters rnd state =
   let
     l = length hunters
