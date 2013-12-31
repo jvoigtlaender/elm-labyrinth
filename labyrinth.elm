@@ -49,6 +49,9 @@ ij2xy (i,j) = (-0.5+toFloat(i), 0.5-toFloat(j))
 
 (ox,oy) = ij2xy (0,0)
 
+screen2xy unit (x,y) = (ox+toFloat(x)/unit,oy-toFloat(y)/unit)
+xy2screen unit (x,y) = ((x-ox-0.5-toFloat(mi)/2)*unit,(y-oy+0.5+toFloat(mj)/2)*unit)
+
 closer_than d (x1,y1) (x2,y2) = (x1-x2)^2+(y1-y2)^2 < d^2
 
 maze_list =
@@ -97,7 +100,7 @@ game_state =
 
 player_input : Signal (XY -> Maybe Dir)
 player_input = lift2
-               (\{x,y} (ix,iy,keep) (px,py) ->
+               (\{x,y} ((ix,iy),keep) (px,py) ->
                  if x==0 && y==0
                  then
                    if closer_than 0.25 (ix,iy) (px,py)
@@ -110,12 +113,14 @@ player_input = lift2
                         else Nothing
                  else Just (x,y))
                Keyboard.arrows
-               (lift2
-                (\ts m -> head (ts ++ [m]))
-                (lift
-                 (filter (\(x,y,_) -> let (i,j) = xy2ij (x,y) in 1<=i && i<=mi && 1<=j && j<=mj))
-                 (lift2 (\unit -> map (\{x,y} -> (ox+toFloat(x)/unit,oy-toFloat(y)/unit,\_ _ -> True))) unit Touch.touches))
-                (lift2 (\unit (x,y) -> (ox+toFloat(x)/unit,oy-toFloat(y)/unit,closer_than 2)) unit Mouse.position))
+               (lift3
+                (\sc2xy ts m -> head (filter (\(xy,_) -> let (i,j) = xy2ij xy
+                                                         in 1<=i && i<=mi && 1<=j && j<=mj)
+                                      (map (\{x,y} -> (sc2xy (x,y),\_ _ -> True)) ts)
+                                      ++ [(sc2xy m,closer_than 2)]))
+                (screen2xy <~ unit)
+                Touch.touches
+                Mouse.position)
 
 move_player : Time -> (Bool, XY -> Maybe Dir, Float) -> { a | player : (XY,Dir), gems : Set.Set IJ }
                                                      -> { a | player : (XY,Dir), gems : Set.Set IJ }
@@ -199,6 +204,7 @@ display { caught, won } { player, hunters, gems } player_color boxWalking menuPl
     wi = (mi+1)*unit
     he = (mj+1)*unit
     unit' = toFloat(unit)
+    xy2sc = xy2screen unit'
   in
    if caught || isJust won
    then
@@ -212,17 +218,15 @@ display { caught, won } { player, hunters, gems } player_color boxWalking menuPl
      , (midTop, text . monospace . Text.height (unit'/2) . toText <| "(reload to start again)")
      ]
    else
-     let xy2screen (x,y) = ((x-ox-0.5-toFloat(mi)/2)*unit',(y-oy+0.5+toFloat(mj)/2)*unit')
-     in
      flow down
      [ collage wi he <|
-       map (\g -> move (xy2screen (ij2xy g)) (filled yellow (ngon 5 (unit'/8)))) (Set.toList gems)
+       map (\g -> move (xy2sc (ij2xy g)) (filled yellow (ngon 5 (unit'/8)))) (Set.toList gems)
        ++
-       [move (xy2screen player) (player_color (circle (unit'/4)))]
+       [move (xy2sc player) (player_color (circle (unit'/4)))]
        ++
-       map (\h -> move (xy2screen h) (filled black (circle (unit'/2)))) hunters
+       map (\h -> move (xy2sc h) (filled black (circle (unit'/2)))) hunters
        ++
-       map (\b -> move (xy2screen (ij2xy b)) (filled blue (square unit'))) maze_list
+       map (\b -> move (xy2sc (ij2xy b)) (filled blue (square unit'))) maze_list
      , flow right [ spacer unit unit
                   , container (11*unit) (3*unit `div` 4) midLeft
                     (text . Text.color red . monospace . Text.height (unit'/2) . toText <| "use arrows, mouse or touch to steer") ]
