@@ -30,6 +30,25 @@ frame = fps 100
 
 --------------------------------------
 
+text = leftAligned
+
+hsv h s v =
+  let c = v * s
+      fmod x y = x - toFloat (floor (x / y)) * y
+      h' = 3 * fmod (h / pi) 2
+      x = c * (1 - abs (fmod h' 2 - 1))
+      (r',g',b') = if h'<1 then (c,x,0) else
+                     if h'<2 then (x,c,0) else
+                       if h'<3 then (0,c,x) else
+                         if h'<4 then (0,x,c) else
+                           if h'<5 then (x,0,c) else (c,0,x)
+      m = v - c
+  in rgb (floor (255*(r'+m))) (floor (255*(g'+m))) (floor (255*(b'+m)))
+
+makeInputElement : a -> (Graphics.Input.Handle a -> Element) -> (Element, Signal a)
+makeInputElement a f = let inp = Graphics.Input.input a
+                       in (f inp.handle, inp.signal)
+
 player_color = lift (\t -> filled (hsv (t / 750) 1 0.95)) (every 100)
 
 sgn x = if x<0 then -1 else if x>0 then 1 else 0
@@ -189,16 +208,17 @@ outcome = foldp
           { caught = False, won = Nothing }
           (lift2 (,) (timestamp game_state) timeStampAtStart) 
 
-(boxWalking,walking) = Graphics.Input.checkbox True
+(boxWalking,walking) = makeInputElement True (\h -> Graphics.Input.checkbox h id True)
 
-myMenu : (number -> number) -> [number] -> (Signal Element, Signal number)
-myMenu f = Graphics.Input.dropDown . map (\i -> (if i>0 then "+" ++ show i else show i,f i))
+myMenu : (number -> number) -> [number] -> (Element, Signal number)
+myMenu f ns = let options = map (\i -> (if i>0 then "+" ++ show i else show i,f i)) ns
+              in makeInputElement (snd (head options)) (\h -> Graphics.Input.dropDown h options)
 
 (menuPlayer,slowness_player)   = myMenu (\i -> (18-i)*20) [0,1,2,3,-1,-2,-3]
 (menuHunters,slowness_hunters) = myMenu (\i -> (22-i)*20) [0,1,2,3,-1,-2,-3]
 (menuUnit,unit)                = myMenu (\i -> (5+i)*8) [0,1,2,3,-1,-2,-3]
 
-display { caught, won } { player, hunters, gems } player_color boxWalking menuPlayer menuHunters menuUnit unit -- frequ
+display { caught, won } { player, hunters, gems } player_color unit -- frequ
   =
   let
     wi = (mi+1)*unit
@@ -237,25 +257,21 @@ display { caught, won } { player, hunters, gems } player_color boxWalking menuPl
      , flow right [ spacer unit unit
                   , container (25*unit `div` 4) (3*unit `div` 4) midLeft
                     (text . monospace . Text.height (unit'/2) . toText <| "adjust player speed:")
-                  , let d = max 20 (unit `div` 2) in container (3*d) (3*unit `div` 4) middle menuPlayer ]
+                  , let d = max 20 (unit `div` 2) in container (5*d) (3*unit `div` 4) middle menuPlayer ]
      , flow right [ spacer unit unit
                   , container (25*unit `div` 4) (3*unit `div` 4) midLeft
                     (text . monospace . Text.height (unit'/2) . toText <| "adjust hunters speed:")
-                  , let d = max 20 (unit `div` 2) in container (3*d) (3*unit `div` 4) middle menuHunters ]
+                  , let d = max 20 (unit `div` 2) in container (5*d) (3*unit `div` 4) middle menuHunters ]
      , flow right [ spacer unit unit
                   , container (37*unit `div` 4) (3*unit `div` 4) midLeft
                     (text . monospace . Text.height (unit'/2) . toText <| "adjust graphics scaling factor:")
-                  , let d = max 20 (unit `div` 2) in container (3*d) (3*unit `div` 4) middle menuUnit ]
+                  , let d = max 20 (unit `div` 2) in container (5*d) (3*unit `div` 4) middle menuUnit ]
      -- , asText frequ
      ]
 
-main = lift8 display
+main = lift4 display
        outcome
        game_state
        (sampleOn frame' player_color)
-       boxWalking
-       menuPlayer
-       menuHunters
-       menuUnit
        unit
        -- <| (\(t,c) -> 1000*c/t) <~ foldp (\dt (t,c) -> (t+dt,c+1)) (0,0) frame'
