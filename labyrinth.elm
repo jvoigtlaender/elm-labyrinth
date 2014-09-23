@@ -1,8 +1,10 @@
 import String
+import Maybe (isNothing, isJust, maybe)
 import List
 import Set
 import Random
 import Keyboard
+import Text
 import Mouse
 import Touch
 import Graphics.Input
@@ -115,7 +117,7 @@ game_state =
    initially
    (merge
     (move_player <~ frame' ~ sampleOn frame' (lift3 (,,) walking player_input slowness_player))
-    (move_hunters <~ Random.floatList (lift (\_ -> 2*(length hunters)) (keepIf id False (fst <~ hunter_steps)))))
+    (move_hunters <~ Random.floatList (lift (\_ -> 2*(length hunters)) (keepIf identity False (fst <~ hunter_steps)))))
 
 player_input : Signal (XY -> Maybe Dir)
 player_input = lift2
@@ -153,8 +155,8 @@ move_player dt (walk,input,sl) state =
   in
    { state
    | player <-
-       if isEmpty . Set.toList . Set.intersect maze_set . Set.fromList 
-          . map (xy2ij . (\(u,v) -> (x'+u,y'+v)))
+       if isEmpty <| Set.toList <| Set.intersect maze_set <| Set.fromList 
+          <| map (xy2ij << (\(u,v) -> (x'+u,y'+v)))
           <| [(0.25,0.25),(0,0.25),(-0.25,0.25),(-0.25,0),(-0.25,-0.25),(0,-0.25),(0.25,-0.25),(0.25,0)]
        then ((x',y'),(ndx,ndy))
        else ((x,y),(0,0))
@@ -180,7 +182,7 @@ move_hunters rnd state =
           1 -> (1,0)
           2 -> (0,-1)
           3 -> (-1,0)
-          _ -> if r `mod` 2 == 0
+          _ -> if r % 2 == 0
                then (0,if j<pj then 1 else if j>pj then -1 else 0) 
                else (if i<pi then 1 else if i>pi then -1 else 0,0)
     walk_on (r,h) = case h of
@@ -208,7 +210,7 @@ outcome = foldp
           { caught = False, won = Nothing }
           (lift2 (,) (timestamp game_state) timeStampAtStart) 
 
-(boxWalking,walking) = makeInputElement True (\h -> Graphics.Input.checkbox h id True)
+(boxWalking,walking) = makeInputElement True (\h -> Graphics.Input.checkbox h identity True)
 
 myMenu : (number -> number) -> [number] -> (Element, Signal number)
 myMenu f ns = let options = map (\i -> (if i>0 then "+" ++ show i else show i,f i)) ns
@@ -229,13 +231,13 @@ display { caught, won } { player, hunters, gems } player_color unit -- frequ
    if caught || isJust won
    then
      flow down <|
-     map (uncurry <| container wi (he `div` 2))
+     map (uncurry <| container wi (he // 2))
      [ (midBottom, if isJust won
                    then
-                     let after = toFloat(truncate ((\(Just t) -> t) won) `div` 100)/10
-                     in text . monospace . Text.height (0.75*unit') . toText <| "YOU WON (" ++ show after ++ "s)!"
-                   else text . monospace . Text.height unit' . toText <| "GAME OVER!")
-     , (midTop, text . monospace . Text.height (unit'/2) . toText <| "(reload to start again)")
+                     let after = toFloat(truncate ((\(Just t) -> t) won) // 100)/10
+                     in text <| monospace <| Text.height (0.75*unit') <| toText <| "YOU WON (" ++ show after ++ "s)!"
+                   else text <| monospace <| Text.height unit' <| toText <| "GAME OVER!")
+     , (midTop, text <| monospace <| Text.height (unit'/2) <| toText <| "(reload to start again)")
      ]
    else
      flow down
@@ -248,24 +250,24 @@ display { caught, won } { player, hunters, gems } player_color unit -- frequ
        ++
        map (\b -> move (xy2sc (ij2xy b)) (filled blue (square unit'))) maze_list
      , flow right [ spacer unit unit
-                  , container (11*unit) (3*unit `div` 4) midLeft
-                    (text . Text.color red . monospace . Text.height (unit'/2) . toText <| "use arrows, mouse or touch to steer") ]
+                  , container (11*unit) (3*unit // 4) midLeft
+                    (text <| Text.color red <| monospace <| Text.height (unit'/2) <| toText <| "use arrows, mouse or touch to steer") ]
      , flow right [ spacer unit unit
-                  , container (7*unit) (3*unit `div` 4) midLeft
-                    (text . monospace . Text.height (unit'/2) . toText <| "keep walking direction:")
-                  , let d = max 20 (unit `div` 2) in container d (3*unit `div` 4) middle boxWalking ]
+                  , container (7*unit) (3*unit // 4) midLeft
+                    (text <| monospace <| Text.height (unit'/2) <| toText <| "keep walking direction:")
+                  , let d = max 20 (unit // 2) in container d (3*unit // 4) middle boxWalking ]
      , flow right [ spacer unit unit
-                  , container (25*unit `div` 4) (3*unit `div` 4) midLeft
-                    (text . monospace . Text.height (unit'/2) . toText <| "adjust player speed:")
-                  , let d = max 20 (unit `div` 2) in container (5*d) (3*unit `div` 4) middle menuPlayer ]
+                  , container (25*unit // 4) (3*unit // 4) midLeft
+                    (text <| monospace <| Text.height (unit'/2) <| toText <| "adjust player speed:")
+                  , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuPlayer ]
      , flow right [ spacer unit unit
-                  , container (25*unit `div` 4) (3*unit `div` 4) midLeft
-                    (text . monospace . Text.height (unit'/2) . toText <| "adjust hunters speed:")
-                  , let d = max 20 (unit `div` 2) in container (5*d) (3*unit `div` 4) middle menuHunters ]
+                  , container (25*unit // 4) (3*unit // 4) midLeft
+                    (text <| monospace <| Text.height (unit'/2) <| toText <| "adjust hunters speed:")
+                  , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuHunters ]
      , flow right [ spacer unit unit
-                  , container (37*unit `div` 4) (3*unit `div` 4) midLeft
-                    (text . monospace . Text.height (unit'/2) . toText <| "adjust graphics scaling factor:")
-                  , let d = max 20 (unit `div` 2) in container (5*d) (3*unit `div` 4) middle menuUnit ]
+                  , container (37*unit // 4) (3*unit // 4) midLeft
+                    (text <| monospace <| Text.height (unit'/2) <| toText <| "adjust graphics scaling factor:")
+                  , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuUnit ]
      -- , asText frequ
      ]
 
