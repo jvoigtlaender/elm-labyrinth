@@ -32,8 +32,6 @@ frame = fps 100
 
 --------------------------------------
 
-text = leftAligned
-
 makeInputElement : a -> (Graphics.Input.Handle a -> Element) -> (Element, Signal a)
 makeInputElement a f = let inp = Graphics.Input.input a
                        in (f inp.handle, inp.signal)
@@ -222,9 +220,9 @@ display { caught, won } { player, hunters, gems } player_color unit -- frequ
      [ (midBottom, if isJust won
                    then
                      let after = toFloat(truncate ((\(Just t) -> t) won) // 100)/10
-                     in text <| monospace <| Text.height (0.75*unit') <| toText <| "YOU WON (" ++ show after ++ "s)!"
-                   else text <| monospace <| Text.height unit' <| toText <| "GAME OVER!")
-     , (midTop, text <| monospace <| Text.height (unit'/2) <| toText <| "(reload to start again)")
+                     in leftAligned <| monospace <| Text.height (0.75*unit') <| toText <| "YOU WON (" ++ show after ++ "s)!"
+                   else leftAligned <| monospace <| Text.height unit' <| toText <| "GAME OVER!")
+     , (midTop, leftAligned <| monospace <| Text.height (unit'/2) <| toText <| "(reload to start again)")
      ]
    else
      flow down
@@ -238,22 +236,22 @@ display { caught, won } { player, hunters, gems } player_color unit -- frequ
        map (\b -> move (xy2sc (ij2xy b)) (filled blue (square unit'))) maze_list
      , flow right [ spacer unit unit
                   , container (11*unit) (3*unit // 4) midLeft
-                    (text <| Text.color red <| monospace <| Text.height (unit'/2) <| toText <| "use arrows, mouse or touch to steer") ]
+                    (leftAligned <| Text.color red <| monospace <| Text.height (unit'/2) <| toText <| "use arrows, mouse or touch to steer") ]
      , flow right [ spacer unit unit
                   , container (7*unit) (3*unit // 4) midLeft
-                    (text <| monospace <| Text.height (unit'/2) <| toText <| "keep walking direction:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| toText <| "keep walking direction:")
                   , let d = max 20 (unit // 2) in container d (3*unit // 4) middle boxWalking ]
      , flow right [ spacer unit unit
                   , container (25*unit // 4) (3*unit // 4) midLeft
-                    (text <| monospace <| Text.height (unit'/2) <| toText <| "adjust player speed:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| toText <| "adjust player speed:")
                   , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuPlayer ]
      , flow right [ spacer unit unit
                   , container (25*unit // 4) (3*unit // 4) midLeft
-                    (text <| monospace <| Text.height (unit'/2) <| toText <| "adjust hunters speed:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| toText <| "adjust hunters speed:")
                   , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuHunters ]
      , flow right [ spacer unit unit
                   , container (37*unit // 4) (3*unit // 4) midLeft
-                    (text <| monospace <| Text.height (unit'/2) <| toText <| "adjust graphics scaling factor:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| toText <| "adjust graphics scaling factor:")
                   , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuUnit ]
      -- , asText frequ
      ]
