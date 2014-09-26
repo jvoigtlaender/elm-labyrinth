@@ -34,24 +34,11 @@ frame = fps 100
 
 text = leftAligned
 
-hsv h s v =
-  let c = v * s
-      fmod x y = x - toFloat (floor (x / y)) * y
-      h' = 3 * fmod (h / pi) 2
-      x = c * (1 - abs (fmod h' 2 - 1))
-      (r',g',b') = if h'<1 then (c,x,0) else
-                     if h'<2 then (x,c,0) else
-                       if h'<3 then (0,c,x) else
-                         if h'<4 then (0,x,c) else
-                           if h'<5 then (x,0,c) else (c,0,x)
-      m = v - c
-  in rgb (floor (255*(r'+m))) (floor (255*(g'+m))) (floor (255*(b'+m)))
-
 makeInputElement : a -> (Graphics.Input.Handle a -> Element) -> (Element, Signal a)
 makeInputElement a f = let inp = Graphics.Input.input a
                        in (f inp.handle, inp.signal)
 
-player_color = lift (\t -> filled (hsv (t / 750) 1 0.95)) (every 100)
+player_color = lift (\t -> filled (hsl (t / 750) 1 0.5)) (every 100)
 
 sgn x = if x<0 then -1 else if x>0 then 1 else 0
 
