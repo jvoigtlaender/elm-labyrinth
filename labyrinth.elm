@@ -1,11 +1,13 @@
 import String
+import Maybe
+import Maybe (..)
 import List
 import List (..)
 import Set
 import Random
 import Keyboard
 import Text
-import Text (..)
+import Text (leftAligned, monospace)
 import Mouse
 import Touch
 import Graphics.Input
@@ -45,17 +47,9 @@ makeInputElement a f = let cha = Signal.channel a
 
 player_color = Signal.map (\t -> filled (hsl (t / 750) 1 0.5)) (every 100)
 
-isNothing m = case m of
-                Nothing -> True
-                Just _  -> False
+maybe b f = withDefault b << Maybe.map f
 
-isJust = not << isNothing
-
-maybe b f m = case m of
-                Nothing -> b
-                Just a  -> f a
-
-zip = List.map2 (,)
+isJust = maybe False (always True)
 
 floatList ns =
   let next n seed = let (l, seed') = Random.generate (Random.list n (Random.float 0 1)) seed
@@ -88,8 +82,8 @@ closer_than d (x1,y1) (x2,y2) = (x1-x2)^2+(y1-y2)^2 < d^2
 
 maze_list =
    concatMap
-   (\(j,l) -> List.map (\(i,_) -> (i,j)) (filter (\(_,c) -> c/=' ') (zip [1..mi] (String.toList l))))
-   (zip [1..mj] maze)
+   (\(j,l) -> List.map (\(i,_) -> (i,j)) (filter (\(_,c) -> c/=' ') (List.map2 (,) [1..mi] (String.toList l))))
+   (List.map2 (,) [1..mj] maze)
 
 maze_set = Set.fromList maze_list
 
@@ -160,7 +154,7 @@ move_player dt (walk,input,sl) state =
   let
     ((x,y),(dx,dy)) = state.player
     dir = input (x,y)
-    (ndx,ndy) = if walk && isNothing dir then (dx,dy) else case dir of {Nothing -> (0,0); Just d -> d}
+    (ndx,ndy) = if walk && not (isJust dir) then (dx,dy) else case dir of {Nothing -> (0,0); Just d -> d}
     x' = x+dt/sl*ndx
     y' = y+dt/sl*ndy
   in
@@ -199,7 +193,7 @@ move_hunters rnd state =
     walk_on (r,h) = case h of
                       Stalled (i,j)          -> ((i,j),dir r (i,j))
                       Moving ((i,j),(di,dj)) -> ((i+di,j+dj),(di,dj))
-    hunters' = List.map walk_on (zip (take l rs) state.hunters)
+    hunters' = List.map walk_on (List.map2 (,) (take l rs) state.hunters)
     forbidden = Set.union maze_set (Set.fromList (List.map fst hunters'))
     check_and_patch (r,((i',j'),(di,dj))) =
       if Set.member (i'+di,j'+dj) forbidden
@@ -211,7 +205,7 @@ move_hunters rnd state =
       else
         Moving ((i',j'),(di,dj))
   in
-   { state | hunters <- List.map check_and_patch (zip (drop l rs) hunters') }
+   { state | hunters <- List.map check_and_patch (List.map2 (,) (drop l rs) hunters') }
 
 outcome : Signal { caught : Bool, won : Maybe Time }
 outcome = foldp
@@ -246,9 +240,9 @@ display { caught, won } { player, hunters, gems } player_color unit -- frequ
      [ (midBottom, if isJust won
                    then
                      let after = toFloat(truncate ((\(Just t) -> t) won) // 100)/10
-                     in leftAligned <| monospace <| Text.height (0.75*unit') <| fromString <| "YOU WON (" ++ toString after ++ "s)!"
-                   else leftAligned <| monospace <| Text.height unit' <| fromString <| "GAME OVER!")
-     , (midTop, leftAligned <| monospace <| Text.height (unit'/2) <| fromString <| "(reload to start again)")
+                     in leftAligned <| monospace <| Text.height (0.75*unit') <| Text.fromString <| "YOU WON (" ++ toString after ++ "s)!"
+                   else leftAligned <| monospace <| Text.height unit' <| Text.fromString <| "GAME OVER!")
+     , (midTop, leftAligned <| monospace <| Text.height (unit'/2) <| Text.fromString <| "(reload to start again)")
      ]
    else
      flow down
@@ -262,22 +256,22 @@ display { caught, won } { player, hunters, gems } player_color unit -- frequ
        List.map (\b -> move (xy2sc (ij2xy b)) (filled blue (square unit'))) maze_list
      , flow right [ spacer unit unit
                   , container (11*unit) (3*unit // 4) midLeft
-                    (leftAligned <| Text.color red <| monospace <| Text.height (unit'/2) <| fromString <| "use arrows, mouse or touch to steer") ]
+                    (leftAligned <| Text.color red <| monospace <| Text.height (unit'/2) <| Text.fromString <| "use arrows, mouse or touch to steer") ]
      , flow right [ spacer unit unit
                   , container (7*unit) (3*unit // 4) midLeft
-                    (leftAligned <| monospace <| Text.height (unit'/2) <| fromString <| "keep walking direction:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| Text.fromString <| "keep walking direction:")
                   , let d = max 20 (unit // 2) in container d (3*unit // 4) middle boxWalking ]
      , flow right [ spacer unit unit
                   , container (25*unit // 4) (3*unit // 4) midLeft
-                    (leftAligned <| monospace <| Text.height (unit'/2) <| fromString <| "adjust player speed:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| Text.fromString <| "adjust player speed:")
                   , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuPlayer ]
      , flow right [ spacer unit unit
                   , container (25*unit // 4) (3*unit // 4) midLeft
-                    (leftAligned <| monospace <| Text.height (unit'/2) <| fromString <| "adjust hunters speed:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| Text.fromString <| "adjust hunters speed:")
                   , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuHunters ]
      , flow right [ spacer unit unit
                   , container (37*unit // 4) (3*unit // 4) midLeft
-                    (leftAligned <| monospace <| Text.height (unit'/2) <| fromString <| "adjust graphics scaling factor:")
+                    (leftAligned <| monospace <| Text.height (unit'/2) <| Text.fromString <| "adjust graphics scaling factor:")
                   , let d = max 20 (unit // 2) in container (5*d) (3*unit // 4) middle menuUnit ]
      -- , asText frequ
      ]
