@@ -1,4 +1,3 @@
 *~
-build/
-cache/
-
+elm.js
+elm-stuff/
