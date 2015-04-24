@@ -1,22 +1,22 @@
 import String
 import Maybe
-import Maybe (..)
+import Maybe exposing (..)
 import List
-import List (..)
+import List exposing (..)
 import Set
 import Random
 import Keyboard
 import Text
-import Text (leftAligned, monospace)
+import Text exposing (monospace)
 import Mouse
 import Touch
 import Graphics.Input
 import Signal
-import Signal (..)
-import Time (..)
-import Color (..)
-import Graphics.Collage (..)
-import Graphics.Element (..)
+import Signal exposing (..)
+import Time exposing (..)
+import Color exposing (..)
+import Graphics.Collage exposing (..)
+import Graphics.Element exposing (..)
 
 maze =
    [
@@ -41,15 +41,18 @@ frame = fps 100
 
 --------------------------------------
 
-makeInputElement : a -> (Signal.Channel a -> Element) -> (Element, Signal a)
-makeInputElement a f = let cha = Signal.channel a
-                       in (f cha, Signal.subscribe cha)
+makeInputElement : a -> (Signal.Mailbox a -> Element) -> (Element, Signal a)
+makeInputElement a f = let mbx = Signal.mailbox a
+                       in (f mbx, mbx.signal)
 
 player_color = Signal.map (\t -> filled (hsl (t / 750) 1 0.5)) (every 100)
 
 maybe b f = withDefault b << Maybe.map f
 
 isJust = maybe False (always True)
+
+head' xs = case head xs of
+             Just x -> x
 
 floatList ns =
   let next n seed = let (l, seed') = Random.generate (Random.list n (Random.float 0 1)) seed
@@ -64,7 +67,7 @@ timeStampAtStart = fst <~ (timestamp (constant ()))
 
 frame' = delay 0 frame
 
-mi = length (String.toList (head maze))
+mi = length (String.toList (head' maze))
 mj = length maze
 
 type alias XY = (Float,Float)
@@ -82,7 +85,7 @@ closer_than d (x1,y1) (x2,y2) = (x1-x2)^2+(y1-y2)^2 < d^2
 
 maze_list =
    concatMap
-   (\(j,l) -> List.map (\(i,_) -> (i,j)) (filter (\(_,c) -> c/=' ') (List.map2 (,) [1..mi] (String.toList l))))
+   (\(j,l) -> List.map (\(i,_) -> (i,j)) (List.filter (\(_,c) -> c/=' ') (List.map2 (,) [1..mi] (String.toList l))))
    (List.map2 (,) [1..mj] maze)
 
 maze_set = Set.fromList maze_list
@@ -122,7 +125,7 @@ game_state =
    initially
    (merge
     (move_player <~ frame' ~ sampleOn frame' (Signal.map3 (,,) walking player_input slowness_player))
-    (move_hunters <~ floatList (Signal.map (\_ -> 2*(length hunters)) (keepIf identity False (fst <~ hunter_steps)))))
+    (move_hunters <~ floatList (Signal.map (\_ -> 2*(length hunters)) (Signal.filter identity False (fst <~ hunter_steps)))))
 
 player_input : Signal (XY -> Maybe Dir)
 player_input = Signal.map2
@@ -140,10 +143,10 @@ player_input = Signal.map2
                  else Just (x,y))
                Keyboard.arrows
                (Signal.map3
-                (\sc2xy ts m -> head (filter (\(xy,_) -> let (i,j) = xy2ij xy
-                                                         in 1<=i && i<=mi && 1<=j && j<=mj)
-                                      (List.map (\{x,y} -> (sc2xy (x,y),\_ _ -> True)) ts)
-                                      ++ [(sc2xy m,closer_than 2)]))
+                (\sc2xy ts m -> head' (List.filter (\(xy,_) -> let (i,j) = xy2ij xy
+                                                               in 1<=i && i<=mi && 1<=j && j<=mj)
+                                       (List.map (\{x,y} -> (sc2xy (x,y),\_ _ -> True)) ts)
+                                       ++ [(sc2xy m,closer_than 2)]))
                 (screen2xy <~ unit)
                 Touch.touches
                 Mouse.position)
@@ -215,11 +218,11 @@ outcome = foldp
           { caught = False, won = Nothing }
           (Signal.map2 (,) (timestamp game_state) timeStampAtStart) 
 
-(boxWalking,walking) = makeInputElement True (\c -> Graphics.Input.checkbox (Signal.send c) True)
+(boxWalking,walking) = makeInputElement True (\c -> Graphics.Input.checkbox (Signal.message c.address) True)
 
 myMenu : (number -> number) -> List number -> (Element, Signal number)
 myMenu f ns = let options = List.map (\i -> (if i>0 then "+" ++ toString i else toString i,f i)) ns
-              in makeInputElement (snd (head options)) (\c -> Graphics.Input.dropDown (Signal.send c) options)
+              in makeInputElement (snd (head' options)) (\c -> Graphics.Input.dropDown (Signal.message c.address) options)
 
 (menuPlayer,slowness_player)   = myMenu (\i -> (18-i)*20) [0,1,2,3,-1,-2,-3]
 (menuHunters,slowness_hunters) = myMenu (\i -> (22-i)*20) [0,1,2,3,-1,-2,-3]
