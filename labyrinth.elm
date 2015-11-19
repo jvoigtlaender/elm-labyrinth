@@ -1,17 +1,13 @@
 import String
-import Maybe
 import Maybe exposing (..)
-import List
 import List exposing (..)
 import Set
 import Random
 import Keyboard
-import Text
 import Text exposing (monospace)
 import Mouse
 import Touch
 import Graphics.Input
-import Signal
 import Signal exposing (..)
 import Time exposing (..)
 import Color exposing (..)
@@ -53,17 +49,18 @@ isJust = maybe False (always True)
 
 head' xs = case head xs of
              Just x -> x
+             _ -> Debug.crash "This cannot happen!"
 
 floatList ns =
   let next n seed = let (l, seed') = Random.generate (Random.list n (Random.float 0 1)) seed
                     in (l, Just seed')
-  in fst <~ foldp (\(n,seed0) (_, mseed) -> maybe (next n seed0) (next n) mseed)
-                  ([], Nothing)
-                  (Signal.map2 (,) ns (Random.initialSeed << truncate <~ timeStampAtStart))
+  in Signal.map fst <| foldp (\(n,seed0) (_, mseed) -> maybe (next n seed0) (next n) mseed)
+                             ([], Nothing)
+                             (Signal.map2 (,) ns (Signal.map (Random.initialSeed << truncate) timeStampAtStart))
 
 sgn x = if x<0 then -1 else if x>0 then 1 else 0
 
-timeStampAtStart = fst <~ (timestamp (constant ()))
+timeStampAtStart = Signal.map fst (timestamp (constant ()))
 
 frame' = delay 0 frame
 
@@ -117,15 +114,15 @@ game_state =
    sampleOn frame'
    <|
    Signal.map2 (\s state -> { state
-                            | player <- fst (state.player)  
-                            , hunters <- List.map (smoothen (clamp 0 1 s)) state.hunters })
-   (snd <~ hunter_steps)
+                            | player = fst (state.player)  
+                            , hunters = List.map (smoothen (clamp 0 1 s)) state.hunters })
+   (Signal.map snd hunter_steps)
    <|
    foldp (<|)
    initially
    (merge
-    (move_player <~ frame' ~ sampleOn frame' (Signal.map3 (,,) walking player_input slowness_player))
-    (move_hunters <~ floatList (Signal.map (\_ -> 2*(length hunters)) (Signal.filter identity False (fst <~ hunter_steps)))))
+    (Signal.map2 move_player frame' (sampleOn frame' (Signal.map3 (,,) walking player_input slowness_player)))
+    (Signal.map move_hunters <| floatList (Signal.map (\_ -> 2*(length hunters)) (Signal.filter identity False (Signal.map fst hunter_steps)))))
 
 player_input : Signal (XY -> Maybe Dir)
 player_input = Signal.map2
@@ -147,7 +144,7 @@ player_input = Signal.map2
                                                                in 1<=i && i<=mi && 1<=j && j<=mj)
                                        (List.map (\{x,y} -> (sc2xy (x,y),\_ _ -> True)) ts)
                                        ++ [(sc2xy m,closer_than 2)]))
-                (screen2xy <~ unit)
+                (Signal.map screen2xy unit)
                 Touch.touches
                 Mouse.position)
 
@@ -157,18 +154,18 @@ move_player dt (walk,input,sl) state =
   let
     ((x,y),(dx,dy)) = state.player
     dir = input (x,y)
-    (ndx,ndy) = if walk && not (isJust dir) then (dx,dy) else case dir of {Nothing -> (0,0); Just d -> d}
+    (ndx,ndy) = if walk && not (isJust dir) then (dx,dy) else withDefault (0,0) dir
     x' = x+dt/sl*ndx
     y' = y+dt/sl*ndy
   in
    { state
-   | player <-
+   | player =
        if isEmpty <| Set.toList <| Set.intersect maze_set <| Set.fromList 
           <| List.map (xy2ij << (\(u,v) -> (x'+u,y'+v)))
           <| [(0.25,0.25),(0,0.25),(-0.25,0.25),(-0.25,0),(-0.25,-0.25),(0,-0.25),(0.25,-0.25),(0.25,0)]
        then ((x',y'),(ndx,ndy))
        else ((x,y),(0,0))
-   , gems <-
+   , gems =
        let g = xy2ij (x',y')
        in if closer_than 0.1875 (x',y') (ij2xy g)
           then Set.remove g state.gems
@@ -208,7 +205,7 @@ move_hunters rnd state =
       else
         Moving ((i',j'),(di,dj))
   in
-   { state | hunters <- List.map check_and_patch (List.map2 (,) (drop l rs) hunters') }
+   { state | hunters = List.map check_and_patch (List.map2 (,) (drop l rs) hunters') }
 
 outcome : Signal { caught : Bool, won : Maybe Time }
 outcome = foldp
@@ -240,11 +237,11 @@ display { caught, won } { player, hunters, gems } player_color unit -- frequ
    then
      flow down <|
      List.map (uncurry <| container wi (he // 2))
-     [ (midBottom, if isJust won
-                   then
-                     let after = toFloat(truncate ((\(Just t) -> t) won) // 100)/10
+     [ (midBottom, case won of
+                   Just t ->
+                     let after = toFloat(truncate t // 100)/10
                      in leftAligned <| monospace <| Text.height (0.75*unit') <| Text.fromString <| "YOU WON (" ++ toString after ++ "s)!"
-                   else leftAligned <| monospace <| Text.height unit' <| Text.fromString <| "GAME OVER!")
+                   _ -> leftAligned <| monospace <| Text.height unit' <| Text.fromString <| "GAME OVER!")
      , (midTop, leftAligned <| monospace <| Text.height (unit'/2) <| Text.fromString <| "(reload to start again)")
      ]
    else
