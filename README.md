@@ -1,5 +1,7 @@
-labyrinth-elm
+elm-labyrinth
 =============
 
+[![Build Status](https://travis-ci.org/jvoigtlaender/elm-labyrinth.svg?branch=master)](https://travis-ci.org/jvoigtlaender/elm-labyrinth)
+
 A small game implemented to play around with [Elm](http://elm-lang.org/).
-Runs online at http://www.janis-voigtlaender.eu/teaching/afp13/labyrinth.html.
+Runs online at https://jvoigtlaender.github.io/elm-labyrinth.

@@ -1,0 +1,8 @@
+language: node_js
+node_js:
+- '4.1'
+script: bash ./deploy.sh
+env:
+  global:
+  - "-GH_REF": github.com/jvoigtlaender/elm-labyrinth
+  - secure: hP5QpIa+GahSGPNUruUSBd53Q4ezeb/xZd+LVh2CyeMib5YXbNaGBiBbcDtLhq4Vdp2/kOv0a6PKr1af/BeIjxvELYmVJY5bYmdJUgFH9MXKsYu4MfrA3NxGIbyXuseOhTJYqTnWkazcZMdiXCvx203DIJhYc9uv+o2j9NRW9gh+ewtCQn+hd8RFJg6MOAtkwKeTkuq91Y9aRFNUl7IANuLlT0gZde85DHG909ZYDlyyyuFoOwgHDkp9L6tDHzRawFJt+s/b+vPTcMBaq/rdvTAbgZJlRPcJBET8pCOJwMwHrCNkJtAr654PHHLIojFqwv8FBtA061fS8h1nqnRiA0f66ElaBtlNMuRmWhGTIrHDPZs2R2Fr0m/dFpgdgY3zDyQVIhI0PwLvboM/LTedDGYhsdr3PY8dV8lC5fUQr0bqs6RR8N5+mac6tLGj0+bcqbF2KJjxQH5EDRHKiEXoUSKKVUGMNStUx/oQALbreo88YT2evm5CbAjF4I4TFUGPRfwwpai0m42psyNPW91/dHk8vBt53VGc2TtAPErCkQGDsQDO2O3pFbEAndWcGY5kFj8z/M0UEkvYaJSxbAicGh7lliFTvm1mS6mxCwGeYRoGdx8RkSBj2W165KXDp52cPypjK6oZvJ2cU6qQlFrg5a14n53Y3P8glFdgmhMd/Ww=
