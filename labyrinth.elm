@@ -10,6 +10,7 @@ import Touch
 import Graphics.Input
 import Signal exposing (..)
 import Time exposing (..)
+import AnimationFrame
 import Color exposing (..)
 import Graphics.Collage exposing (..)
 import Graphics.Element exposing (..)
@@ -33,9 +34,9 @@ player = (2,2)
 
 hunters = [(5,5),(5,8),(6,7),(10,2)]
 
-frame = fps 100
-
 --------------------------------------
+
+frame = AnimationFrame.frame
 
 makeInputElement : a -> (Signal.Mailbox a -> Element) -> (Element, Signal a)
 makeInputElement a f = let mbx = Signal.mailbox a
