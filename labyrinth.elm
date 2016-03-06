@@ -1,5 +1,6 @@
 import String
 import Maybe exposing (..)
+import Maybe.Extra exposing (..)
 import List exposing (..)
 import Set
 import Random
@@ -44,10 +45,6 @@ makeInputElement a f = let mbx = Signal.mailbox a
 
 player_color = Signal.map (\t -> filled (hsl (t / 750) 1 0.5)) (every 100)
 
-maybe b f = withDefault b << Maybe.map f
-
-isJust = maybe False (always True)
-
 head' xs = case head xs of
              Just x -> x
              _ -> Debug.crash "This cannot happen!"
@@ -55,7 +52,7 @@ head' xs = case head xs of
 floatList ns =
   let next n seed = let (l, seed') = Random.generate (Random.list n (Random.float 0 1)) seed
                     in (l, Just seed')
-  in Signal.map fst <| foldp (\(n,seed0) (_, mseed) -> maybe (next n seed0) (next n) mseed)
+  in Signal.map fst <| foldp (\(n,seed0) (_, mseed) -> mapDefault (next n seed0) (next n) mseed)
                              ([], Nothing)
                              (Signal.map2 (,) ns (Signal.map (Random.initialSeed << truncate) timeStampAtStart))
 
@@ -155,7 +152,7 @@ move_player dt (walk,input,sl) state =
   let
     ((x,y),(dx,dy)) = state.player
     dir = input (x,y)
-    (ndx,ndy) = if walk && not (isJust dir) then (dx,dy) else withDefault (0,0) dir
+    (ndx,ndy) = if walk && isNothing dir then (dx,dy) else withDefault (0,0) dir
     x' = x+dt/sl*ndx
     y' = y+dt/sl*ndy
   in
@@ -212,7 +209,7 @@ outcome : Signal { caught : Bool, won : Maybe Time }
 outcome = foldp
           (\((t, { player, hunters, gems }), t0) { caught, won }
            -> { caught = List.any (closer_than 0.75 player) hunters || caught
-              , won = maybe (if isEmpty (Set.toList gems) then Just (t-t0) else Nothing) Just won })
+              , won = mapDefault (if isEmpty (Set.toList gems) then Just (t-t0) else Nothing) Just won })
           { caught = False, won = Nothing }
           (Signal.map2 (,) (timestamp game_state) timeStampAtStart) 
 
