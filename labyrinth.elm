@@ -62,7 +62,7 @@ timeStampAtStart = Signal.map fst (timestamp (constant ()))
 
 frame' = delay 0 frame
 
-mi = length (String.toList (head' maze))
+mi = String.length (head' maze)
 mj = length maze
 
 type alias XY = (Float,Float)
@@ -80,8 +80,8 @@ closer_than d (x1,y1) (x2,y2) = (x1-x2)^2+(y1-y2)^2 < d^2
 
 maze_list =
    concatMap
-   (\(j,l) -> List.map (\(i,_) -> (i,j)) (List.filter (\(_,c) -> c/=' ') (List.map2 (,) [0..mi-1] (String.toList l))))
-   (List.map2 (,) [0..mj-1] maze)
+   (\(j,l) -> List.filterMap (\(i,c) -> if c==' ' then Nothing else Just (i,j)) (indexedMap (,) (String.toList l)))
+   (indexedMap (,) maze)
 
 maze_set = Set.fromList maze_list
 
@@ -108,6 +108,7 @@ game_state =
                      Stalled p          -> ij2xy p
                      Moving (p,(di,dj)) -> let (x,y) = ij2xy p
                                            in (x+toFloat(di)*s,y-toFloat(dj)*s)
+    n = 2*(length hunters)
   in
    sampleOn frame'
    <|
@@ -120,7 +121,7 @@ game_state =
    initially
    (merge
     (Signal.map2 move_player frame' (sampleOn frame' (Signal.map3 (,,) walking player_input slowness_player)))
-    (Signal.map move_hunters <| floatList (Signal.map (\_ -> 2*(length hunters)) (Signal.filter identity False (Signal.map fst hunter_steps)))))
+    (Signal.map move_hunters <| floatList (Signal.filterMap (\(b,_) -> if b then Just n else Nothing) n hunter_steps)))
 
 player_input : Signal (XY -> Maybe Dir)
 player_input = Signal.map2
@@ -158,7 +159,7 @@ move_player dt (walk,input,sl) state =
   in
    { state
    | player =
-       if isEmpty <| Set.toList <| Set.intersect maze_set <| Set.fromList 
+       if Set.isEmpty <| Set.intersect maze_set <| Set.fromList 
           <| List.map (xy2ij << (\(u,v) -> (x'+u,y'+v)))
           <| [(0.25,0.25),(0,0.25),(-0.25,0.25),(-0.25,0),(-0.25,-0.25),(0,-0.25),(0.25,-0.25),(0.25,0)]
        then ((x',y'),(ndx,ndy))
@@ -208,8 +209,8 @@ move_hunters rnd state =
 outcome : Signal { caught : Bool, won : Maybe Time }
 outcome = foldp
           (\((t, { player, hunters, gems }), t0) { caught, won }
-           -> { caught = List.any (closer_than 0.75 player) hunters || caught
-              , won = mapDefault (if isEmpty (Set.toList gems) then Just (t-t0) else Nothing) Just won })
+           -> { caught = any (closer_than 0.75 player) hunters || caught
+              , won = mapDefault (if Set.isEmpty gems then Just (t-t0) else Nothing) Just won })
           { caught = False, won = Nothing }
           (Signal.map2 (,) (timestamp game_state) timeStampAtStart) 
 
