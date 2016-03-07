@@ -31,9 +31,9 @@ maze =
    , "XXXXXXXXXXX"
    ]
 
-player = (2,2)
+player = (1,1)
 
-hunters = [(5,5),(5,8),(6,7),(10,2)]
+hunters = [(4,4),(4,7),(5,6),(9,1)]
 
 --------------------------------------
 
@@ -71,7 +71,7 @@ type alias IJ = (Int,Int)
 xy2ij (x,y) = (round(x+0.5), round(0.5-y))
 ij2xy (i,j) = (-0.5+toFloat(i), 0.5-toFloat(j))
 
-(ox,oy) = ij2xy (0,0)
+(ox,oy) = ij2xy (-1,-1)
 
 screen2xy unit (x,y) = (ox+toFloat(x)/unit,oy-toFloat(y)/unit)
 xy2screen unit (x,y) = ((x-ox-0.5-toFloat(mi)/2)*unit,(y-oy+0.5+toFloat(mj)/2)*unit)
@@ -80,8 +80,8 @@ closer_than d (x1,y1) (x2,y2) = (x1-x2)^2+(y1-y2)^2 < d^2
 
 maze_list =
    concatMap
-   (\(j,l) -> List.map (\(i,_) -> (i,j)) (List.filter (\(_,c) -> c/=' ') (List.map2 (,) [1..mi] (String.toList l))))
-   (List.map2 (,) [1..mj] maze)
+   (\(j,l) -> List.map (\(i,_) -> (i,j)) (List.filter (\(_,c) -> c/=' ') (List.map2 (,) [0..mi-1] (String.toList l))))
+   (List.map2 (,) [0..mj-1] maze)
 
 maze_set = Set.fromList maze_list
 
@@ -99,7 +99,7 @@ initially : { player : (XY,Dir), hunters : List HunterState, gems : Set.Set IJ }
 initially = 
    { player = (ij2xy player, (0,0))
    , hunters = List.map Stalled hunters
-   , gems = Set.diff (Set.fromList (concatMap (\j -> List.map (\i -> (i,j)) [1..mi]) [1..mj])) maze_set }
+   , gems = Set.diff (Set.fromList (concatMap (\j -> List.map (\i -> (i,j)) [0..mi-1]) [0..mj-1])) maze_set }
 
 game_state : Signal { player : XY, hunters : List XY, gems : Set.Set IJ }
 game_state = 
@@ -139,7 +139,7 @@ player_input = Signal.map2
                Keyboard.arrows
                (Signal.map3
                 (\sc2xy ts m -> head' (List.filter (\(xy,_) -> let (i,j) = xy2ij xy
-                                                               in 1<=i && i<=mi && 1<=j && j<=mj)
+                                                               in 0<=i && i<mi && 0<=j && j<mj)
                                        (List.map (\{x,y} -> (sc2xy (x,y),\_ _ -> True)) ts)
                                        ++ [(sc2xy m,closer_than 2)]))
                 (Signal.map screen2xy unit)
