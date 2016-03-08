@@ -155,8 +155,9 @@ move_player dt (walk,input,sl) state =
     ((x,y),(dx,dy)) = state.player
     dir = input (x,y)
     (ndx,ndy) = if walk && isNothing dir then (dx,dy) else withDefault (0,0) dir
-    x' = x+dt/sl*ndx
-    y' = y+dt/sl*ndy
+    f = clamp 0 1 (dt/sl)
+    x' = x+f*ndx
+    y' = y+f*ndy
   in
    { state
    | player =
