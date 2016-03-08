@@ -54,7 +54,7 @@ floatList ns =
                     in (l, Just seed')
   in Signal.map fst <| foldp (\(n,seed0) (_, mseed) -> mapDefault (next n seed0) (next n) mseed)
                              ([], Nothing)
-                             (Signal.map2 (,) ns (Signal.map (Random.initialSeed << truncate) timeStampAtStart))
+                             (Signal.map2 (\n -> (,) n << Random.initialSeed << truncate) ns timeStampAtStart)
 
 sgn x = if x<0 then -1 else if x>0 then 1 else 0
 
@@ -112,10 +112,10 @@ game_state =
   in
    sampleOn frame'
    <|
-   Signal.map2 (\s state -> { state
-                            | player = fst (state.player)  
-                            , hunters = List.map (smoothen (clamp 0 1 s)) state.hunters })
-   (Signal.map snd hunter_steps)
+   Signal.map2 (\(_,s) state -> { state
+                                | player = fst (state.player)
+                                , hunters = List.map (smoothen (clamp 0 1 s)) state.hunters })
+   hunter_steps
    <|
    foldp (<|)
    initially
@@ -124,8 +124,14 @@ game_state =
     (Signal.map move_hunters <| floatList (Signal.filterMap (\(b,_) -> if b then Just n else Nothing) n hunter_steps)))
 
 player_input : Signal (XY -> Maybe Dir)
-player_input = Signal.map2
-               (\{x,y} ((ix,iy),keep) (px,py) ->
+player_input = Signal.map4
+               (\{x,y} u ts m ->
+                let ((ix,iy),keep) = head' (List.filter (\(xy,_) -> let (i,j) = xy2ij xy
+                                                                    in 0<=i && i<mi && 0<=j && j<mj)
+                                            (List.map (\{x,y} -> (screen2xy u (x,y),\_ _ -> True)) ts)
+                                            ++ [(screen2xy u m,closer_than 2)])
+                in
+                 \(px,py) ->
                  if x==0 && y==0
                  then
                    if closer_than 0.25 (ix,iy) (px,py)
@@ -138,14 +144,9 @@ player_input = Signal.map2
                         else Nothing
                  else Just (x,y))
                Keyboard.arrows
-               (Signal.map3
-                (\sc2xy ts m -> head' (List.filter (\(xy,_) -> let (i,j) = xy2ij xy
-                                                               in 0<=i && i<mi && 0<=j && j<mj)
-                                       (List.map (\{x,y} -> (sc2xy (x,y),\_ _ -> True)) ts)
-                                       ++ [(sc2xy m,closer_than 2)]))
-                (Signal.map screen2xy unit)
-                Touch.touches
-                Mouse.position)
+               unit
+               Touch.touches
+               Mouse.position
 
 move_player : Time -> (Bool, XY -> Maybe Dir, Float) -> { a | player : (XY,Dir), gems : Set.Set IJ }
                                                      -> { a | player : (XY,Dir), gems : Set.Set IJ }
@@ -189,12 +190,12 @@ move_hunters rnd state =
           _ -> if r % 2 == 0
                then (0,if j<pj then 1 else if j>pj then -1 else 0) 
                else (if i<pi then 1 else if i>pi then -1 else 0,0)
-    walk_on (r,h) = case h of
+    walk_on r h = case h of
                       Stalled (i,j)          -> ((i,j),dir r (i,j))
                       Moving ((i,j),(di,dj)) -> ((i+di,j+dj),(di,dj))
-    hunters' = List.map walk_on (List.map2 (,) (take l rs) state.hunters)
+    hunters' = List.map2 walk_on (take l rs) state.hunters
     forbidden = Set.union maze_set (Set.fromList (List.map fst hunters'))
-    check_and_patch (r,((i',j'),(di,dj))) =
+    check_and_patch r ((i',j'),(di,dj)) =
       if Set.member (i'+di,j'+dj) forbidden
       then
         let (di',dj') = dir r (i',j')
@@ -204,7 +205,7 @@ move_hunters rnd state =
       else
         Moving ((i',j'),(di,dj))
   in
-   { state | hunters = List.map check_and_patch (List.map2 (,) (drop l rs) hunters') }
+   { state | hunters = List.map2 check_and_patch (drop l rs) hunters' }
 
 outcome : Signal { caught : Bool, won : Maybe Time }
 outcome = foldp
