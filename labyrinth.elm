@@ -62,7 +62,7 @@ timeStampAtStart = Signal.map fst (timestamp (constant ()))
 
 frame' = delay 0 frame
 
-mi = String.length (head' maze)
+mi = mapDefault 0 String.length (head maze)
 mj = length maze
 
 type alias XY = (Float,Float)
@@ -126,10 +126,11 @@ game_state =
 player_input : Signal (XY -> Maybe Dir)
 player_input = Signal.map4
                (\{x,y} u ts m ->
-                let ((ix,iy),keep) = head' (List.filter (\(xy,_) -> let (i,j) = xy2ij xy
+                let ((ix,iy),keep) = withDefault (screen2xy u m,closer_than 2) <|
+                                      head (List.filter (\(xy,_) -> let (i,j) = xy2ij xy
                                                                     in 0<=i && i<mi && 0<=j && j<mj)
                                             (List.map (\{x,y} -> (screen2xy u (x,y),\_ _ -> True)) ts)
-                                            ++ [(screen2xy u m,closer_than 2)])
+                                           )
                 in
                  \(px,py) ->
                  if x==0 && y==0
