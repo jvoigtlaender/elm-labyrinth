@@ -1,10 +1,10 @@
 rm -rf out || exit 0;
 
 elm-package install --yes
-elm-make --yes
+libsysconfcpus/bin/sysconfcpus -n $CPUNUM elm-make --yes
 
 mkdir out
-elm-make labyrinth.elm --output out/index.html --yes
+libsysconfcpus/bin/sysconfcpus -n $CPUNUM elm-make labyrinth.elm --output out/index.html --yes
 cd out
 
 git init
